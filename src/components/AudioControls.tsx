@@ -2,8 +2,9 @@ import { useState, useRef } from "react";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Mic, Music, Volume2 } from "lucide-react";
+import { Mic, Volume2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import PlaylistControls from "./PlaylistControls";
 
 interface AudioControlsProps {
   isNFTVerified: boolean;
@@ -14,7 +15,6 @@ const AudioControls = ({ isNFTVerified }: AudioControlsProps) => {
   const [micVolume, setMicVolume] = useState(0.5);
   const [fileVolume, setFileVolume] = useState(0.5);
   const [isRecording, setIsRecording] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 
@@ -45,24 +45,11 @@ const AudioControls = ({ isNFTVerified }: AudioControlsProps) => {
     }
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file && file.type === "audio/mpeg") {
-      setSelectedFile(file);
-      if (audioRef.current) {
-        audioRef.current.src = URL.createObjectURL(file);
-        audioRef.current.volume = fileVolume;
-      }
-      toast({
-        title: "File Loaded",
-        description: `${file.name} loaded successfully`,
-      });
-    } else {
-      toast({
-        title: "Invalid File",
-        description: "Please select an MP3 file",
-        variant: "destructive",
-      });
+  const handleTrackSelect = (file: File) => {
+    if (audioRef.current) {
+      audioRef.current.src = URL.createObjectURL(file);
+      audioRef.current.volume = fileVolume;
+      audioRef.current.play();
     }
   };
 
@@ -81,60 +68,56 @@ const AudioControls = ({ isNFTVerified }: AudioControlsProps) => {
   };
 
   return (
-    <Card className="p-6 space-y-6">
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Mic className="h-5 w-5" />
-            <h3 className="font-semibold">Microphone Input</h3>
+    <div className="space-y-6">
+      <Card className="p-6 space-y-6">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Mic className="h-5 w-5" />
+              <h3 className="font-semibold">Microphone Input</h3>
+            </div>
+            <Button
+              onClick={isRecording ? stopMicStream : startMicStream}
+              disabled={!isNFTVerified}
+              variant={isRecording ? "destructive" : "default"}
+            >
+              {isRecording ? "Stop Mic" : "Start Mic"}
+            </Button>
           </div>
-          <Button
-            onClick={isRecording ? stopMicStream : startMicStream}
-            disabled={!isNFTVerified}
-            variant={isRecording ? "destructive" : "default"}
-          >
-            {isRecording ? "Stop Mic" : "Start Mic"}
-          </Button>
+          <div className="flex items-center gap-4">
+            <Volume2 className="h-5 w-5" />
+            <Slider
+              value={[micVolume]}
+              onValueChange={handleMicVolumeChange}
+              max={1}
+              step={0.01}
+              disabled={!isRecording || !isNFTVerified}
+            />
+          </div>
         </div>
-        <div className="flex items-center gap-4">
-          <Volume2 className="h-5 w-5" />
-          <Slider
-            value={[micVolume]}
-            onValueChange={handleMicVolumeChange}
-            max={1}
-            step={0.01}
-            disabled={!isRecording || !isNFTVerified}
-          />
-        </div>
-      </div>
 
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Music className="h-5 w-5" />
-            <h3 className="font-semibold">MP3 File Input</h3>
+        <div className="space-y-4">
+          <div className="flex items-center gap-4">
+            <Volume2 className="h-5 w-5" />
+            <h3 className="font-semibold">File Volume</h3>
+            <Slider
+              value={[fileVolume]}
+              onValueChange={handleFileVolumeChange}
+              max={1}
+              step={0.01}
+              disabled={!isNFTVerified}
+            />
           </div>
-          <input
-            type="file"
-            accept=".mp3,audio/mpeg"
-            onChange={handleFileChange}
-            disabled={!isNFTVerified}
-            className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-          />
         </div>
-        <div className="flex items-center gap-4">
-          <Volume2 className="h-5 w-5" />
-          <Slider
-            value={[fileVolume]}
-            onValueChange={handleFileVolumeChange}
-            max={1}
-            step={0.01}
-            disabled={!selectedFile || !isNFTVerified}
-          />
-        </div>
-      </div>
+      </Card>
+
+      <PlaylistControls 
+        isNFTVerified={isNFTVerified}
+        onTrackSelect={handleTrackSelect}
+      />
+      
       <audio ref={audioRef} className="hidden" controls />
-    </Card>
+    </div>
   );
 };
 
