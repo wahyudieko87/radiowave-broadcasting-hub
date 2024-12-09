@@ -5,10 +5,16 @@ import { Wallet } from "lucide-react";
 import { createPublicClient, http, createWalletClient, custom, getContract } from "viem";
 import { gnosis } from "viem/chains";
 
+declare global {
+  interface Window {
+    ethereum?: any;
+  }
+}
+
 const NFT_CONTRACT_ADDRESS = "0x1095f7D414A14Deaa4e89c458eeA837c5DB50E6E";
 const NFT_ABI = [
   "function balanceOf(address owner) view returns (uint256)",
-];
+] as const;
 
 const WalletConnect = ({ onOwnershipVerified }: { onOwnershipVerified: (verified: boolean) => void }) => {
   const [address, setAddress] = useState<string>("");
@@ -42,14 +48,12 @@ const WalletConnect = ({ onOwnershipVerified }: { onOwnershipVerified: (verified
 
       setAddress(userAddress);
 
-      // Switch to Gnosis Chain
       try {
         await window.ethereum.request({
           method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0x64' }], // 100 in hex for Gnosis Chain
+          params: [{ chainId: '0x64' }],
         });
       } catch (switchError: any) {
-        // Add Gnosis Chain if not already added
         if (switchError.code === 4902) {
           await window.ethereum.request({
             method: 'wallet_addEthereumChain',
@@ -68,14 +72,19 @@ const WalletConnect = ({ onOwnershipVerified }: { onOwnershipVerified: (verified
         }
       }
 
-      // Check NFT ownership
       const contract = getContract({
         address: NFT_CONTRACT_ADDRESS,
         abi: NFT_ABI,
         publicClient
       });
 
-      const balance = await contract.read.balanceOf([userAddress]);
+      const balance = await publicClient.readContract({
+        address: NFT_CONTRACT_ADDRESS,
+        abi: NFT_ABI,
+        functionName: 'balanceOf',
+        args: [userAddress]
+      });
+
       const ownsNFT = Number(balance) > 0;
       setHasNFT(ownsNFT);
       onOwnershipVerified(ownsNFT);

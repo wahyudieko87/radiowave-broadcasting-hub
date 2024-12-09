@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Mic, Radio, Settings, Activity } from "lucide-react";
 import BroadcastStatus from "@/components/BroadcastStatus";
-import ConnectionSettings from "@/components/ConnectionSettings";
 import WalletConnect from "@/components/WalletConnect";
 
 const Index = () => {
@@ -47,30 +46,26 @@ const Index = () => {
         <WalletConnect onOwnershipVerified={setIsNFTVerified} />
 
         <Card className="p-6 glass-panel">
-          <div className="grid gap-6 md:grid-cols-2">
-            <div className="space-y-4">
-              <BroadcastStatus isStreaming={isStreaming} />
-              <div className="space-y-2">
-                <Button
-                  size="lg"
-                  className="w-full transition-all duration-300 hover:scale-105"
-                  onClick={isStreaming ? handleStopStream : handleStartStream}
-                  disabled={!isNFTVerified}
-                >
-                  {isStreaming ? (
-                    <>
-                      <Radio className="mr-2 h-5 w-5" /> Stop Broadcasting
-                    </>
-                  ) : (
-                    <>
-                      <Mic className="mr-2 h-5 w-5" /> Start Broadcasting
-                    </>
-                  )}
-                </Button>
-              </div>
+          <div className="space-y-4">
+            <BroadcastStatus isStreaming={isStreaming} />
+            <div className="space-y-2">
+              <Button
+                size="lg"
+                className="w-full transition-all duration-300 hover:scale-105"
+                onClick={isStreaming ? handleStopStream : handleStartStream}
+                disabled={!isNFTVerified}
+              >
+                {isStreaming ? (
+                  <>
+                    <Radio className="mr-2 h-5 w-5" /> Stop Broadcasting
+                  </>
+                ) : (
+                  <>
+                    <Mic className="mr-2 h-5 w-5" /> Start Broadcasting
+                  </>
+                )}
+              </Button>
             </div>
-
-            <ConnectionSettings />
           </div>
         </Card>
 
