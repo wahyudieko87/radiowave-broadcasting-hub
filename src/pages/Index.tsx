@@ -2,9 +2,10 @@ import { useState } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Mic, Radio, Settings, Activity } from "lucide-react";
+import { Mic, Radio, Activity } from "lucide-react";
 import BroadcastStatus from "@/components/BroadcastStatus";
 import WalletConnect from "@/components/WalletConnect";
+import AudioControls from "@/components/AudioControls";
 
 const Index = () => {
   const [isStreaming, setIsStreaming] = useState(false);
@@ -69,16 +70,14 @@ const Index = () => {
           </div>
         </Card>
 
+        <AudioControls isNFTVerified={isNFTVerified} />
+
         <Card className="p-6 glass-panel">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-2">
               <Activity className="h-5 w-5" />
               <h2 className="text-xl font-semibold">Stream Metrics</h2>
             </div>
-            <Button variant="outline" size="sm">
-              <Settings className="h-4 w-4 mr-2" />
-              Configure
-            </Button>
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div className="p-4 rounded-lg bg-secondary">
