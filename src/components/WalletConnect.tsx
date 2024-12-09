@@ -14,6 +14,8 @@ declare global {
 const NFT_CONTRACT_ADDRESS = "0x1095f7D414A14Deaa4e89c458eeA837c5DB50E6E";
 const NFT_ABI = [
   "function balanceOf(address owner) view returns (uint256)",
+  "function ownerOf(uint256 tokenId) view returns (address)",
+  "function tokenURI(uint256 tokenId) view returns (string)"
 ] as const;
 
 const WalletConnect = ({ onOwnershipVerified }: { onOwnershipVerified: (verified: boolean) => void }) => {
