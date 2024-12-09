@@ -72,12 +72,6 @@ const WalletConnect = ({ onOwnershipVerified }: { onOwnershipVerified: (verified
         }
       }
 
-      const contract = getContract({
-        address: NFT_CONTRACT_ADDRESS,
-        abi: NFT_ABI,
-        publicClient
-      });
-
       const balance = await publicClient.readContract({
         address: NFT_CONTRACT_ADDRESS,
         abi: NFT_ABI,
