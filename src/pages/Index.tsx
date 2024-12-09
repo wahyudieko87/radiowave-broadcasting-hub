@@ -5,12 +5,22 @@ import { Card } from "@/components/ui/card";
 import { Mic, Radio, Settings, Activity } from "lucide-react";
 import BroadcastStatus from "@/components/BroadcastStatus";
 import ConnectionSettings from "@/components/ConnectionSettings";
+import WalletConnect from "@/components/WalletConnect";
 
 const Index = () => {
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isNFTVerified, setIsNFTVerified] = useState(false);
   const { toast } = useToast();
 
   const handleStartStream = () => {
+    if (!isNFTVerified) {
+      toast({
+        title: "Access Denied",
+        description: "You need to connect your wallet and own the required NFT to start broadcasting",
+        variant: "destructive",
+      });
+      return;
+    }
     setIsStreaming(true);
     toast({
       title: "Broadcast Started",
@@ -34,6 +44,8 @@ const Index = () => {
           <p className="text-muted-foreground">Professional Broadcasting Interface</p>
         </div>
 
+        <WalletConnect onOwnershipVerified={setIsNFTVerified} />
+
         <Card className="p-6 glass-panel">
           <div className="grid gap-6 md:grid-cols-2">
             <div className="space-y-4">
@@ -43,6 +55,7 @@ const Index = () => {
                   size="lg"
                   className="w-full transition-all duration-300 hover:scale-105"
                   onClick={isStreaming ? handleStopStream : handleStartStream}
+                  disabled={!isNFTVerified}
                 >
                   {isStreaming ? (
                     <>
