@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Wallet } from "lucide-react";
-import { createPublicClient, http, createWalletClient, custom, getContract } from "viem";
+import { createPublicClient, http, createWalletClient, custom } from "viem";
 import { gnosis } from "viem/chains";
 
 declare global {
@@ -11,16 +11,11 @@ declare global {
   }
 }
 
-const NFT_CONTRACT_ADDRESS = "0xf575A680C9324b0BE915674CE6515DEEdBdb1b70";
-const NFT_ABI = [
-  "function balanceOf(address owner) view returns (uint256)",
-  "function ownerOf(uint256 tokenId) view returns (address)",
-  "function tokenURI(uint256 tokenId) view returns (string)"
-] as const;
+const AUTHORIZED_WALLET = "0xDbca8ab9eb325A8F550fFC6e45277081a6c7D681".toLowerCase();
 
 const WalletConnect = ({ onOwnershipVerified }: { onOwnershipVerified: (verified: boolean) => void }) => {
   const [address, setAddress] = useState<string>("");
-  const [hasNFT, setHasNFT] = useState(false);
+  const [isAuthorized, setIsAuthorized] = useState(false);
   const { toast } = useToast();
 
   const publicClient = createPublicClient({
@@ -74,21 +69,14 @@ const WalletConnect = ({ onOwnershipVerified }: { onOwnershipVerified: (verified
         }
       }
 
-      const balance = await publicClient.readContract({
-        address: NFT_CONTRACT_ADDRESS,
-        abi: NFT_ABI,
-        functionName: 'balanceOf',
-        args: [userAddress]
-      });
+      const isWalletAuthorized = userAddress.toLowerCase() === AUTHORIZED_WALLET;
+      setIsAuthorized(isWalletAuthorized);
+      onOwnershipVerified(isWalletAuthorized);
 
-      const ownsNFT = Number(balance) > 0;
-      setHasNFT(ownsNFT);
-      onOwnershipVerified(ownsNFT);
-
-      if (!ownsNFT) {
+      if (!isWalletAuthorized) {
         toast({
-          title: "NFT Required",
-          description: "You need to own the required NFT on Gnosis Chain to use this application",
+          title: "Access Denied",
+          description: "Only the authorized wallet address can use this application",
           variant: "destructive",
         });
       }
@@ -96,7 +84,7 @@ const WalletConnect = ({ onOwnershipVerified }: { onOwnershipVerified: (verified
       console.error("Connection error:", error);
       toast({
         title: "Connection Error",
-        description: "Failed to connect wallet or verify NFT ownership",
+        description: "Failed to connect wallet",
         variant: "destructive",
       });
     }
@@ -114,7 +102,7 @@ const WalletConnect = ({ onOwnershipVerified }: { onOwnershipVerified: (verified
       </Button>
       {address && (
         <p className="mt-2 text-sm text-muted-foreground">
-          {hasNFT ? "✅ NFT Ownership Verified" : "❌ Required NFT not found"}
+          {isAuthorized ? "✅ Authorized Wallet" : "❌ Unauthorized Wallet"}
         </p>
       )}
     </div>
