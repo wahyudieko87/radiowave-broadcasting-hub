@@ -10,7 +10,14 @@ import AudioControls from "@/components/AudioControls";
 const SHOUTCAST_CONFIG = {
   host: 'web3radio.cloud',
   port: 8000,
-  password: 'passweb3radio'
+  password: 'passweb3radio',
+  mountpoint: '/stream',
+  audioConfig: {
+    bitrate: 128000, // 128 kb/s
+    sampleRate: 44100,
+    channels: 2,
+    encoder: 'mp3'
+  }
 };
 
 const Index = () => {
@@ -31,20 +38,26 @@ const Index = () => {
 
     try {
       // Test server availability first
-      fetch(`http://${SHOUTCAST_CONFIG.host}:${SHOUTCAST_CONFIG.port}/status-json.xsl`)
+      fetch(`http://${SHOUTCAST_CONFIG.host}:${SHOUTCAST_CONFIG.port}/admin.cgi?pass=${SHOUTCAST_CONFIG.password}&mode=viewxml`)
         .then(response => {
           if (!response.ok) throw new Error('Server not available');
           
           // If server is available, establish WebSocket connection
-          const wsUrl = `ws://${SHOUTCAST_CONFIG.host}:${SHOUTCAST_CONFIG.port}/stream`;
+          const wsUrl = `ws://${SHOUTCAST_CONFIG.host}:${SHOUTCAST_CONFIG.port}${SHOUTCAST_CONFIG.mountpoint}`;
           const socket = new WebSocket(wsUrl);
 
           socket.onopen = () => {
             console.log('WebSocket connection established');
-            socket.send(JSON.stringify({
-              type: 'auth',
-              password: SHOUTCAST_CONFIG.password
-            }));
+            // Send Shoutcast v1 authentication header
+            const authHeader = btoa(`${SHOUTCAST_CONFIG.password}:`);
+            socket.send(`SOURCE ${SHOUTCAST_CONFIG.password} HTTP/1.0\r\n` +
+                       `Authorization: Basic ${authHeader}\r\n` +
+                       'Content-Type: audio/mpeg\r\n' +
+                       `icy-name:Web3Radio\r\n` +
+                       `icy-genre:Various\r\n` +
+                       `icy-pub:1\r\n` +
+                       `icy-br:${SHOUTCAST_CONFIG.audioConfig.bitrate / 1000}\r\n\r\n`);
+            
             setIsStreaming(true);
             toast({
               title: "Broadcast Started",
