@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Mic, Radio, Activity } from "lucide-react";
@@ -23,51 +23,70 @@ const Index = () => {
     if (!isNFTVerified) {
       toast({
         title: "Access Denied",
-        description: "You need to connect your wallet and own the required NFT to start broadcasting",
+        description: "You need to connect your wallet and be authorized to start broadcasting",
         variant: "destructive",
       });
       return;
     }
 
     try {
-      const wsUrl = `ws://${SHOUTCAST_CONFIG.host}:${SHOUTCAST_CONFIG.port}/stream`;
-      const socket = new WebSocket(wsUrl);
+      // Test server availability first
+      fetch(`http://${SHOUTCAST_CONFIG.host}:${SHOUTCAST_CONFIG.port}/status-json.xsl`)
+        .then(response => {
+          if (!response.ok) throw new Error('Server not available');
+          
+          // If server is available, establish WebSocket connection
+          const wsUrl = `ws://${SHOUTCAST_CONFIG.host}:${SHOUTCAST_CONFIG.port}/stream`;
+          const socket = new WebSocket(wsUrl);
 
-      socket.onopen = () => {
-        socket.send(JSON.stringify({
-          type: 'auth',
-          password: SHOUTCAST_CONFIG.password
-        }));
-        setIsStreaming(true);
-        toast({
-          title: "Broadcast Started",
-          description: "Successfully connected to Shoutcast server",
+          socket.onopen = () => {
+            console.log('WebSocket connection established');
+            socket.send(JSON.stringify({
+              type: 'auth',
+              password: SHOUTCAST_CONFIG.password
+            }));
+            setIsStreaming(true);
+            toast({
+              title: "Broadcast Started",
+              description: "Successfully connected to Shoutcast server",
+            });
+          };
+
+          socket.onerror = (error) => {
+            console.error('WebSocket Error:', error);
+            toast({
+              title: "Connection Error",
+              description: "Failed to connect to broadcast server. Please check server status.",
+              variant: "destructive",
+            });
+            setIsStreaming(false);
+          };
+
+          socket.onclose = (event) => {
+            console.log('WebSocket connection closed:', event.code, event.reason);
+            setIsStreaming(false);
+            toast({
+              title: "Broadcast Ended",
+              description: event.code === 1000 ? "Disconnected from broadcast server" : "Connection lost unexpectedly",
+              variant: event.code === 1000 ? "default" : "destructive",
+            });
+          };
+
+          setBroadcastSocket(socket);
+        })
+        .catch(error => {
+          console.error('Server check failed:', error);
+          toast({
+            title: "Server Error",
+            description: "Could not connect to broadcast server. Please try again later.",
+            variant: "destructive",
+          });
         });
-      };
-
-      socket.onerror = (error) => {
-        console.error('WebSocket Error:', error);
-        toast({
-          title: "Connection Error",
-          description: "Failed to connect to broadcast server",
-          variant: "destructive",
-        });
-      };
-
-      socket.onclose = () => {
-        setIsStreaming(false);
-        toast({
-          title: "Broadcast Ended",
-          description: "Disconnected from broadcast server",
-        });
-      };
-
-      setBroadcastSocket(socket);
     } catch (error) {
       console.error('Connection error:', error);
       toast({
         title: "Error",
-        description: "Failed to establish connection",
+        description: "Failed to establish connection. Please check your network connection.",
         variant: "destructive",
       });
     }
@@ -75,7 +94,7 @@ const Index = () => {
 
   const handleStopStream = () => {
     if (broadcastSocket) {
-      broadcastSocket.close();
+      broadcastSocket.close(1000, "Stream ended by user");
       setBroadcastSocket(null);
       setIsStreaming(false);
       toast({
