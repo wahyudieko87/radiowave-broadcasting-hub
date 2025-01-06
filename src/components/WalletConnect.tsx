@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { Wallet } from "lucide-react";
 import { createPublicClient, http, createWalletClient, custom, getContract } from "viem";
 import { gnosis } from "viem/chains";
@@ -11,7 +11,7 @@ declare global {
   }
 }
 
-const NFT_CONTRACT_ADDRESS = "0x1095f7D414A14Deaa4e89c458eeA837c5DB50E6E";
+const NFT_CONTRACT_ADDRESS = "0xf575A680C9324b0BE915674CE6515DEEdBdb1b70";
 const NFT_ABI = [
   "function balanceOf(address owner) view returns (uint256)",
   "function ownerOf(uint256 tokenId) view returns (address)",
