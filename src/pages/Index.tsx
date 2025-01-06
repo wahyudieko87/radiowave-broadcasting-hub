@@ -7,10 +7,17 @@ import BroadcastStatus from "@/components/BroadcastStatus";
 import WalletConnect from "@/components/WalletConnect";
 import AudioControls from "@/components/AudioControls";
 
+const SHOUTCAST_CONFIG = {
+  host: 'web3radio.cloud',
+  port: 8000,
+  password: 'passweb3radio'
+};
+
 const Index = () => {
   const [isStreaming, setIsStreaming] = useState(false);
   const [isNFTVerified, setIsNFTVerified] = useState(false);
   const { toast } = useToast();
+  const [broadcastSocket, setBroadcastSocket] = useState<WebSocket | null>(null);
 
   const handleStartStream = () => {
     if (!isNFTVerified) {
@@ -21,19 +28,61 @@ const Index = () => {
       });
       return;
     }
-    setIsStreaming(true);
-    toast({
-      title: "Broadcast Started",
-      description: "Successfully connected to Shoutcast server",
-    });
+
+    try {
+      const wsUrl = `ws://${SHOUTCAST_CONFIG.host}:${SHOUTCAST_CONFIG.port}/stream`;
+      const socket = new WebSocket(wsUrl);
+
+      socket.onopen = () => {
+        socket.send(JSON.stringify({
+          type: 'auth',
+          password: SHOUTCAST_CONFIG.password
+        }));
+        setIsStreaming(true);
+        toast({
+          title: "Broadcast Started",
+          description: "Successfully connected to Shoutcast server",
+        });
+      };
+
+      socket.onerror = (error) => {
+        console.error('WebSocket Error:', error);
+        toast({
+          title: "Connection Error",
+          description: "Failed to connect to broadcast server",
+          variant: "destructive",
+        });
+      };
+
+      socket.onclose = () => {
+        setIsStreaming(false);
+        toast({
+          title: "Broadcast Ended",
+          description: "Disconnected from broadcast server",
+        });
+      };
+
+      setBroadcastSocket(socket);
+    } catch (error) {
+      console.error('Connection error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to establish connection",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleStopStream = () => {
-    setIsStreaming(false);
-    toast({
-      title: "Broadcast Stopped",
-      description: "Disconnected from Shoutcast server",
-    });
+    if (broadcastSocket) {
+      broadcastSocket.close();
+      setBroadcastSocket(null);
+      setIsStreaming(false);
+      toast({
+        title: "Broadcast Stopped",
+        description: "Disconnected from Shoutcast server",
+      });
+    }
   };
 
   return (
