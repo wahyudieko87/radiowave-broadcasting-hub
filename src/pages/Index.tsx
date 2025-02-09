@@ -122,7 +122,7 @@ const Index = () => {
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="text-center space-y-2">
           <h1 className="text-4xl font-bold tracking-tight">Web3 Radio Studio</h1>
-          <p className="text-muted-foreground">Professional Broadcasting Interface</p>
+          <p className="text-muted-foreground">web3radio Broadcasting Interface</p>
         </div>
 
         <WalletConnect onOwnershipVerified={setIsNFTVerified} />
