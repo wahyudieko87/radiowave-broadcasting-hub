@@ -11,7 +11,7 @@ declare global {
   }
 }
 
-const AUTHORIZED_WALLET = "0xDbca8ab9eb325A8F550fFC6e45277081a6c7D681".toLowerCase();
+const AUTHORIZED_WALLET = "0x13Dd8b8F54c3b54860F8D41A6FBFF7FFc6bF01eF".toLowerCase();
 
 const WalletConnect = ({ onOwnershipVerified }: { onOwnershipVerified: (verified: boolean) => void }) => {
   const [address, setAddress] = useState<string>("");
