@@ -37,13 +37,13 @@ const Index = () => {
     }
 
     try {
-      // Test server availability first
-      fetch(`http://${SHOUTCAST_CONFIG.host}:${SHOUTCAST_CONFIG.port}/admin.cgi?pass=${SHOUTCAST_CONFIG.password}&mode=viewxml`)
+      // Test server availability first using the proxy
+      fetch(`/api/admin.cgi?pass=${SHOUTCAST_CONFIG.password}&mode=viewxml`)
         .then(response => {
           if (!response.ok) throw new Error('Server not available');
           
-          // If server is available, establish WebSocket connection
-          const wsUrl = `ws://${SHOUTCAST_CONFIG.host}:${SHOUTCAST_CONFIG.port}${SHOUTCAST_CONFIG.mountpoint}`;
+          // If server is available, establish WebSocket connection through proxy
+          const wsUrl = `ws://${window.location.hostname}:${window.location.port}/api${SHOUTCAST_CONFIG.mountpoint}`;
           const socket = new WebSocket(wsUrl);
 
           socket.onopen = () => {
