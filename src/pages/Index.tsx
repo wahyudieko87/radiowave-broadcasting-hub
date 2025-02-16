@@ -1,4 +1,5 @@
-import { useState } from "react";
+
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -13,7 +14,7 @@ const SHOUTCAST_CONFIG = {
   password: 'passweb3radio',
   mountpoint: '/stream',
   audioConfig: {
-    bitrate: 128000, // 128 kb/s
+    bitrate: 128000,
     sampleRate: 44100,
     channels: 2,
     encoder: 'mp3'
@@ -25,8 +26,17 @@ const Index = () => {
   const [isNFTVerified, setIsNFTVerified] = useState(false);
   const { toast } = useToast();
   const [broadcastSocket, setBroadcastSocket] = useState<WebSocket | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
 
-  const handleStartStream = () => {
+  useEffect(() => {
+    return () => {
+      if (broadcastSocket) {
+        broadcastSocket.close();
+      }
+    };
+  }, [broadcastSocket]);
+
+  const handleStartStream = async () => {
     if (!isNFTVerified) {
       toast({
         title: "Access Denied",
@@ -36,67 +46,76 @@ const Index = () => {
       return;
     }
 
+    if (isConnecting) return;
+    setIsConnecting(true);
+
     try {
       // Test server availability first using the proxy
-      fetch(`/api/admin.cgi?pass=${SHOUTCAST_CONFIG.password}&mode=viewxml`)
-        .then(response => {
-          if (!response.ok) throw new Error('Server not available');
-          
-          // If server is available, establish WebSocket connection through proxy
-          const wsUrl = `ws://${window.location.hostname}:${window.location.port}/api${SHOUTCAST_CONFIG.mountpoint}`;
-          const socket = new WebSocket(wsUrl);
+      const response = await fetch(`/api/admin.cgi?pass=${SHOUTCAST_CONFIG.password}&mode=viewxml`);
+      
+      if (!response.ok) {
+        throw new Error('Server not available');
+      }
 
-          socket.onopen = () => {
-            console.log('WebSocket connection established');
-            // Send Shoutcast v1 authentication header
-            const authHeader = btoa(`${SHOUTCAST_CONFIG.password}:`);
-            socket.send(`SOURCE ${SHOUTCAST_CONFIG.password} HTTP/1.0\r\n` +
-                       `Authorization: Basic ${authHeader}\r\n` +
-                       'Content-Type: audio/mpeg\r\n' +
-                       `icy-name:Web3Radio\r\n` +
-                       `icy-genre:Various\r\n` +
-                       `icy-pub:1\r\n` +
-                       `icy-br:${SHOUTCAST_CONFIG.audioConfig.bitrate / 1000}\r\n\r\n`);
-            
-            setIsStreaming(true);
-            toast({
-              title: "Broadcast Started",
-              description: "Successfully connected to Shoutcast server",
-            });
-          };
+      // If server is available, establish WebSocket connection through proxy
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/api${SHOUTCAST_CONFIG.mountpoint}`;
+      console.log('Connecting to WebSocket URL:', wsUrl);
+      
+      const socket = new WebSocket(wsUrl);
 
-          socket.onerror = (error) => {
-            console.error('WebSocket Error:', error);
-            toast({
-              title: "Connection Error",
-              description: "Failed to connect to broadcast server. Please check server status.",
-              variant: "destructive",
-            });
-            setIsStreaming(false);
-          };
-
-          socket.onclose = (event) => {
-            console.log('WebSocket connection closed:', event.code, event.reason);
-            setIsStreaming(false);
-            toast({
-              title: "Broadcast Ended",
-              description: event.code === 1000 ? "Disconnected from broadcast server" : "Connection lost unexpectedly",
-              variant: event.code === 1000 ? "default" : "destructive",
-            });
-          };
-
-          setBroadcastSocket(socket);
-        })
-        .catch(error => {
-          console.error('Server check failed:', error);
-          toast({
-            title: "Server Error",
-            description: "Could not connect to broadcast server. Please try again later.",
-            variant: "destructive",
-          });
+      socket.onopen = () => {
+        console.log('WebSocket connection established');
+        // Send Shoutcast v1 authentication header
+        const authHeader = btoa(`${SHOUTCAST_CONFIG.password}:`);
+        const headers = 
+          `SOURCE ${SHOUTCAST_CONFIG.mountpoint} HTTP/1.0\r\n` +
+          `Authorization: Basic ${authHeader}\r\n` +
+          'Content-Type: audio/mpeg\r\n' +
+          `icy-name:Web3Radio\r\n` +
+          `icy-genre:Various\r\n` +
+          `icy-pub:1\r\n` +
+          `icy-br:${SHOUTCAST_CONFIG.audioConfig.bitrate / 1000}\r\n\r\n`;
+        
+        console.log('Sending headers:', headers);
+        socket.send(headers);
+        
+        setIsStreaming(true);
+        setIsConnecting(false);
+        toast({
+          title: "Broadcast Started",
+          description: "Successfully connected to Shoutcast server",
         });
+      };
+
+      socket.onerror = (error) => {
+        console.error('WebSocket Error:', error);
+        setIsStreaming(false);
+        setIsConnecting(false);
+        toast({
+          title: "Connection Error",
+          description: "Failed to connect to broadcast server. Please check server status.",
+          variant: "destructive",
+        });
+      };
+
+      socket.onclose = (event) => {
+        console.log('WebSocket connection closed:', event.code, event.reason);
+        setIsStreaming(false);
+        setIsConnecting(false);
+        toast({
+          title: "Broadcast Ended",
+          description: event.code === 1000 ? "Disconnected from broadcast server" : "Connection lost unexpectedly",
+          variant: event.code === 1000 ? "default" : "destructive",
+        });
+      };
+
+      setBroadcastSocket(socket);
+
     } catch (error) {
       console.error('Connection error:', error);
+      setIsStreaming(false);
+      setIsConnecting(false);
       toast({
         title: "Error",
         description: "Failed to establish connection. Please check your network connection.",

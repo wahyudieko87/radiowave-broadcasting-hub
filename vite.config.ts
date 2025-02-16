@@ -13,6 +13,8 @@ export default defineConfig(({ mode }) => ({
       '/api': {
         target: `http://${process.env.SHOUTCAST_HOST || 'web3radio.cloud'}:8000`,
         changeOrigin: true,
+        ws: true, // Enable WebSocket proxy
+        xfwd: true, // Forward original headers
         rewrite: (path) => path.replace(/^\/api/, ''),
         configure: (proxy, _options) => {
           proxy.on('error', (err, _req, _res) => {
@@ -23,6 +25,9 @@ export default defineConfig(({ mode }) => ({
           });
           proxy.on('proxyRes', (proxyRes, req, _res) => {
             console.log('Received Response from the Target:', proxyRes.statusCode, req.url);
+          });
+          proxy.on('proxyReqWs', (_proxyReq, _req, _socket, _options, _head) => {
+            console.log('WebSocket connection established');
           });
         },
         headers: {
