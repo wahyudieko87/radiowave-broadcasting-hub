@@ -1,8 +1,9 @@
+
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Mic, Radio, Activity } from "lucide-react";
+import { Mic, Radio, Activity, Download, ChevronRight } from "lucide-react";
 import BroadcastStatus from "@/components/BroadcastStatus";
 import WalletConnect from "@/components/WalletConnect";
 import AudioControls from "@/components/AudioControls";
@@ -122,8 +123,72 @@ const Index = () => {
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="text-center space-y-2">
           <h1 className="text-4xl font-bold tracking-tight">Web3 Radio Studio</h1>
-          <p className="text-muted-foreground">web3radio Broadcasting Interface</p>
+          <p className="text-muted-foreground">Professional Broadcasting Interface</p>
         </div>
+
+        <Card className="p-6 glass-panel">
+          <h2 className="text-xl font-semibold mb-4">Installation Guide</h2>
+          <div className="space-y-4">
+            <div className="bg-secondary/50 p-4 rounded-lg">
+              <h3 className="font-medium mb-2 flex items-center">
+                <Download className="h-5 w-5 mr-2" />
+                Required Software
+              </h3>
+              <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+                <li>BUTT (Broadcast Using This Tool) - <a href="https://danielnoethen.de/butt/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Download</a></li>
+                <li>Mixxx (Optional for DJ mixing) - <a href="https://mixxx.org/download/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Download</a></li>
+              </ul>
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="font-medium">Server Configuration</h3>
+              <div className="grid grid-cols-2 gap-4 bg-secondary/50 p-4 rounded-lg">
+                <div>
+                  <p className="text-sm text-muted-foreground">Server</p>
+                  <p className="font-mono">{SHOUTCAST_CONFIG.host}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Port</p>
+                  <p className="font-mono">{SHOUTCAST_CONFIG.port}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Password</p>
+                  <p className="font-mono">{SHOUTCAST_CONFIG.password}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Type</p>
+                  <p className="font-mono">Shoutcast v1</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="font-medium">Setup Steps</h3>
+              <ol className="space-y-2 text-muted-foreground">
+                <li className="flex items-start">
+                  <ChevronRight className="h-5 w-5 mr-2 flex-shrink-0 mt-0.5" />
+                  Install BUTT (Broadcast Using This Tool)
+                </li>
+                <li className="flex items-start">
+                  <ChevronRight className="h-5 w-5 mr-2 flex-shrink-0 mt-0.5" />
+                  Open BUTT and go to Settings
+                </li>
+                <li className="flex items-start">
+                  <ChevronRight className="h-5 w-5 mr-2 flex-shrink-0 mt-0.5" />
+                  Add new server with the configuration details above
+                </li>
+                <li className="flex items-start">
+                  <ChevronRight className="h-5 w-5 mr-2 flex-shrink-0 mt-0.5" />
+                  Set audio format to MP3, bitrate to 128 kbps
+                </li>
+                <li className="flex items-start">
+                  <ChevronRight className="h-5 w-5 mr-2 flex-shrink-0 mt-0.5" />
+                  Configure your audio input device
+                </li>
+              </ol>
+            </div>
+          </div>
+        </Card>
 
         <WalletConnect onOwnershipVerified={setIsNFTVerified} />
 
