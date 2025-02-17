@@ -9,7 +9,7 @@ import WalletConnect from "@/components/WalletConnect";
 import AudioControls from "@/components/AudioControls";
 
 const SHOUTCAST_CONFIG = {
-  host: 'web3radio.cloud',
+  host: 'http://202.10.40.105/',
   port: 8000,
   password: 'passweb3radio',
   mountpoint: '/stream',
