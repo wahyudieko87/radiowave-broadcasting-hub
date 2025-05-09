@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -7,6 +6,7 @@ import { Mic, Radio, Activity } from "lucide-react";
 import BroadcastStatus from "@/components/BroadcastStatus";
 import WalletConnect from "@/components/WalletConnect";
 import AudioControls from "@/components/AudioControls";
+import audioService from "@/services/AudioService";
 
 const SHOUTCAST_CONFIG = {
   host: 'http://202.10.40.105/',
@@ -25,16 +25,15 @@ const Index = () => {
   const [isStreaming, setIsStreaming] = useState(false);
   const [isNFTVerified, setIsNFTVerified] = useState(false);
   const { toast } = useToast();
-  const [broadcastSocket, setBroadcastSocket] = useState<WebSocket | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
 
   useEffect(() => {
     return () => {
-      if (broadcastSocket) {
-        broadcastSocket.close();
+      if (isStreaming) {
+        handleStopStream();
       }
     };
-  }, [broadcastSocket]);
+  }, []);
 
   const handleStartStream = async () => {
     if (!isNFTVerified) {
@@ -50,70 +49,27 @@ const Index = () => {
     setIsConnecting(true);
 
     try {
-      // Test server availability first using the proxy
-      const response = await fetch(`/api/admin.cgi?pass=${SHOUTCAST_CONFIG.password}&mode=viewxml`);
-      
-      if (!response.ok) {
-        throw new Error('Server not available');
+      // Start microphone and connect to server
+      const micStarted = await audioService.startMicrophone();
+      if (!micStarted) {
+        throw new Error('Failed to access microphone');
       }
-
-      // If server is available, establish WebSocket connection through proxy
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/api${SHOUTCAST_CONFIG.mountpoint}`;
-      console.log('Connecting to WebSocket URL:', wsUrl);
       
-      const socket = new WebSocket(wsUrl);
-
-      socket.onopen = () => {
-        console.log('WebSocket connection established');
-        // Send Shoutcast v1 authentication header
-        const authHeader = btoa(`${SHOUTCAST_CONFIG.password}:`);
-        const headers = 
-          `SOURCE ${SHOUTCAST_CONFIG.mountpoint} HTTP/1.0\r\n` +
-          `Authorization: Basic ${authHeader}\r\n` +
-          'Content-Type: audio/mpeg\r\n' +
-          `icy-name:Web3Radio\r\n` +
-          `icy-genre:Various\r\n` +
-          `icy-pub:1\r\n` +
-          `icy-br:${SHOUTCAST_CONFIG.audioConfig.bitrate / 1000}\r\n\r\n`;
-        
-        console.log('Sending headers:', headers);
-        socket.send(headers);
-        
-        setIsStreaming(true);
-        setIsConnecting(false);
-        toast({
-          title: "Broadcast Started",
-          description: "Successfully connected to Shoutcast server",
-        });
-      };
-
-      socket.onerror = (error) => {
-        console.error('WebSocket Error:', error);
-        setIsStreaming(false);
-        setIsConnecting(false);
-        toast({
-          title: "Connection Error",
-          description: "Failed to connect to broadcast server. Please check server status.",
-          variant: "destructive",
-        });
-      };
-
-      socket.onclose = (event) => {
-        console.log('WebSocket connection closed:', event.code, event.reason);
-        setIsStreaming(false);
-        setIsConnecting(false);
-        toast({
-          title: "Broadcast Ended",
-          description: event.code === 1000 ? "Disconnected from broadcast server" : "Connection lost unexpectedly",
-          variant: event.code === 1000 ? "default" : "destructive",
-        });
-      };
-
-      setBroadcastSocket(socket);
-
+      const connected = await audioService.connectToServer();
+      if (!connected) {
+        throw new Error('Failed to connect to server');
+      }
+      
+      setIsStreaming(true);
+      setIsConnecting(false);
+      toast({
+        title: "Broadcast Started",
+        description: "Successfully connected to broadcast server",
+      });
     } catch (error) {
       console.error('Connection error:', error);
+      audioService.stopMicrophone();
+      audioService.disconnectFromServer();
       setIsStreaming(false);
       setIsConnecting(false);
       toast({
@@ -125,15 +81,13 @@ const Index = () => {
   };
 
   const handleStopStream = () => {
-    if (broadcastSocket) {
-      broadcastSocket.close(1000, "Stream ended by user");
-      setBroadcastSocket(null);
-      setIsStreaming(false);
-      toast({
-        title: "Broadcast Stopped",
-        description: "Disconnected from Shoutcast server",
-      });
-    }
+    audioService.stopMicrophone();
+    audioService.disconnectFromServer();
+    setIsStreaming(false);
+    toast({
+      title: "Broadcast Stopped",
+      description: "Disconnected from broadcast server",
+    });
   };
 
   return (
