@@ -30,15 +30,18 @@ class PCMProcessor extends AudioWorkletProcessor {
       sampleRate: sampleRate // This is a global variable in AudioWorkletGlobalScope
     };
     
+    // Clone the channel data to avoid sharing the buffer
     for (let channel = 0; channel < input.length; channel++) {
-      // Clone the channel data to avoid sharing the buffer
-      audioData.channelData.push(Array.from(input[channel]));
+      // Use Float32Array directly without conversion to Array for better performance
+      audioData.channelData.push(new Float32Array(input[channel]));
     }
     
     this.port.postMessage({
       eventType: 'data',
       audioData: audioData
-    });
+    }, 
+    // Transfer the buffer to avoid copying
+    audioData.channelData.map(buffer => buffer.buffer));
     
     return true;
   }

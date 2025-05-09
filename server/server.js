@@ -3,18 +3,11 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const { spawn } = require('child_process');
-const fs = require('fs');
-const path = require('path');
 const cors = require('cors');
+const path = require('path');
 
 // Server configuration
 const PORT = process.env.PORT || 3000;
-const SHOUTCAST_CONFIG = {
-  host: process.env.SHOUTCAST_HOST || 'web3radio.cloud',
-  port: process.env.SHOUTCAST_PORT || 8000,
-  password: process.env.SHOUTCAST_PASSWORD || 'web3radio',
-  mountpoint: process.env.SHOUTCAST_MOUNTPOINT || '/stream'
-};
 
 // Create Express app and HTTP server
 const app = express();
@@ -29,39 +22,22 @@ const wss = new WebSocket.Server({ server });
 // Serve static files from build directory
 app.use(express.static(path.join(__dirname, '../dist')));
 
-// Handle API requests by proxying to Shoutcast
-app.use('/api', (req, res) => {
-  const options = {
-    hostname: SHOUTCAST_CONFIG.host,
-    port: SHOUTCAST_CONFIG.port,
-    path: req.url,
-    method: req.method,
-    headers: {
-      ...req.headers,
-      host: `${SHOUTCAST_CONFIG.host}:${SHOUTCAST_CONFIG.port}`,
-      'Authorization': `Basic ${Buffer.from(`source:${SHOUTCAST_CONFIG.password}`).toString('base64')}`
-    }
-  };
-
-  const proxyReq = http.request(options, (proxyRes) => {
-    res.writeHead(proxyRes.statusCode, proxyRes.headers);
-    proxyRes.pipe(res);
-  });
-
-  proxyReq.on('error', (error) => {
-    console.error('Proxy request error:', error);
-    res.status(500).send('Proxy error');
-  });
-
-  req.pipe(proxyReq);
-});
+// WebSocket client connections
+const clients = new Set();
 
 // Handle WebSocket connections
 wss.on('connection', (ws) => {
-  console.log('Client connected');
+  clients.add(ws);
+  console.log(`Client connected (Total: ${clients.size})`);
   
   let ffmpeg = null;
   let isConnected = false;
+  let shoutcastConfig = {
+    host: 'web3radio.cloud',
+    port: 8000,
+    password: 'web3radio',
+    mountpoint: '/stream'
+  };
   
   // Handle messages from client
   ws.on('message', (message) => {
@@ -71,27 +47,42 @@ wss.on('connection', (ws) => {
       // Handle different message types
       switch (data.type) {
         case 'connect':
+          // Get custom configuration if provided
+          if (data.config) {
+            shoutcastConfig = {
+              ...shoutcastConfig,
+              ...data.config
+            };
+          }
+          
           // Connect to Shoutcast server using FFmpeg
-          connectToShoutcast(ws);
+          connectToShoutcast(ws, shoutcastConfig);
           break;
           
         case 'audio':
           // Process audio data and send to FFmpeg
           if (ffmpeg && isConnected && data.buffer) {
-            // Convert array back to Float32Array
-            const floatArray = new Float32Array(data.buffer);
-            
-            // Convert Float32Array to Int16Array for PCM output
-            const int16Array = new Int16Array(floatArray.length);
-            for (let i = 0; i < floatArray.length; i++) {
-              const sample = floatArray[i];
-              // Clamp to -1.0 to 1.0 and scale to Int16 range (-32768 to 32767)
-              int16Array[i] = Math.max(-1, Math.min(1, sample)) * 32767;
+            try {
+              // Convert array back to Float32Array
+              const floatArray = new Float32Array(data.buffer);
+              
+              // Convert Float32Array to Int16Array for PCM output
+              const int16Array = new Int16Array(floatArray.length);
+              for (let i = 0; i < floatArray.length; i++) {
+                // Clamp to -1.0 to 1.0 and scale to Int16 range (-32768 to 32767)
+                int16Array[i] = Math.max(-1, Math.min(1, floatArray[i])) * 32767;
+              }
+              
+              // Create buffer from Int16Array
+              const buffer = Buffer.from(int16Array.buffer);
+              
+              // Only write if ffmpeg is still running
+              if (ffmpeg.stdin.writable) {
+                ffmpeg.stdin.write(buffer);
+              }
+            } catch (e) {
+              console.error('Error processing audio data:', e);
             }
-            
-            // Create buffer from Int16Array
-            const buffer = Buffer.from(int16Array.buffer);
-            ffmpeg.stdin.write(buffer);
           }
           break;
           
@@ -102,20 +93,28 @@ wss.on('connection', (ws) => {
       }
     } catch (error) {
       console.error('Error processing message:', error);
+      ws.send(JSON.stringify({
+        type: 'error',
+        message: 'Failed to process message'
+      }));
     }
   });
   
   // Handle client disconnect
   ws.on('close', () => {
-    console.log('Client disconnected');
+    clients.delete(ws);
+    console.log(`Client disconnected (Total: ${clients.size})`);
     disconnectFromShoutcast();
   });
   
   // Connect to Shoutcast server using FFmpeg
-  function connectToShoutcast(ws) {
+  function connectToShoutcast(ws, config) {
     try {
       console.log('Connecting to Shoutcast server...');
-      console.log(`Server: ${SHOUTCAST_CONFIG.host}:${SHOUTCAST_CONFIG.port}`);
+      console.log(`Server: ${config.host}:${config.port}${config.mountpoint}`);
+      
+      // Disconnect existing connection if any
+      disconnectFromShoutcast();
       
       // Create FFmpeg process
       ffmpeg = spawn('ffmpeg', [
@@ -131,8 +130,8 @@ wss.on('connection', (ws) => {
         '-ice_description', 'Web3 Radio Station',
         '-ice_genre', 'Various',
         '-ice_public', '1',
-        '-password', SHOUTCAST_CONFIG.password, // Use proper password flag
-        `icecast://${SHOUTCAST_CONFIG.host}:${SHOUTCAST_CONFIG.port}${SHOUTCAST_CONFIG.mountpoint}`
+        '-password', config.password,
+        `icecast://${config.host}:${config.port}${config.mountpoint}`
       ]);
       
       // Handle FFmpeg output
@@ -145,11 +144,22 @@ wss.on('connection', (ws) => {
         console.log(`FFmpeg stderr: ${output}`);
         
         // Check for successful connection
-        if (output.includes('Connection established') || output.includes('Server connection established')) {
+        if (output.includes('Connection established') || 
+            output.includes('Server connection established') || 
+            output.includes('Starting streaming')) {
           isConnected = true;
           ws.send(JSON.stringify({
             type: 'status',
-            status: 'connected'
+            status: 'connected',
+            message: 'Connected to Shoutcast server'
+          }));
+        }
+        
+        // Check for connection errors
+        if (output.includes('Failed') || output.includes('Error') || output.includes('Could not')) {
+          ws.send(JSON.stringify({
+            type: 'error',
+            message: `FFmpeg error: ${output.split('\n')[0]}`
           }));
         }
       });
@@ -157,38 +167,61 @@ wss.on('connection', (ws) => {
       ffmpeg.on('close', (code) => {
         console.log(`FFmpeg process exited with code ${code}`);
         isConnected = false;
-        ws.send(JSON.stringify({
-          type: 'status',
-          status: 'disconnected',
-          code: code
-        }));
+        
+        // Only send message if websocket is still open
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'status',
+            status: 'disconnected',
+            code: code,
+            message: `FFmpeg process exited with code ${code}`
+          }));
+        }
+        
+        ffmpeg = null;
       });
       
       ffmpeg.on('error', (error) => {
         console.error('FFmpeg error:', error);
-        ws.send(JSON.stringify({
-          type: 'error',
-          message: error.message
-        }));
+        
+        // Only send message if websocket is still open
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'error',
+            message: `FFmpeg error: ${error.message}`
+          }));
+        }
+        
+        isConnected = false;
+        ffmpeg = null;
       });
       
     } catch (error) {
       console.error('Error connecting to Shoutcast:', error);
-      ws.send(JSON.stringify({
-        type: 'error',
-        message: error.message
-      }));
+      
+      // Only send message if websocket is still open
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'error',
+          message: `Connection error: ${error.message}`
+        }));
+      }
     }
   }
   
   // Disconnect from Shoutcast server
   function disconnectFromShoutcast() {
     if (ffmpeg) {
-      // Close FFmpeg process
-      ffmpeg.stdin.end();
-      ffmpeg.kill('SIGTERM');
-      ffmpeg = null;
-      isConnected = false;
+      try {
+        // Close FFmpeg process
+        ffmpeg.stdin.end();
+        ffmpeg.kill('SIGTERM');
+      } catch (error) {
+        console.error('Error disconnecting from Shoutcast:', error);
+      } finally {
+        ffmpeg = null;
+        isConnected = false;
+      }
     }
   }
 });
@@ -201,5 +234,4 @@ app.get('*', (req, res) => {
 // Start server
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`Shoutcast server: ${SHOUTCAST_CONFIG.host}:${SHOUTCAST_CONFIG.port}`);
 });

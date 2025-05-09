@@ -7,6 +7,9 @@ class AudioService {
   private webSocket: WebSocket | null = null;
   private isConnected: boolean = false;
   private isProcessing: boolean = false;
+  private reconnectAttempts: number = 0;
+  private maxReconnectAttempts: number = 5;
+  private reconnectTimeout: number = 2000;
 
   constructor() {
     this.initAudioContext();
@@ -16,7 +19,8 @@ class AudioService {
     try {
       this.audioContext = new AudioContext();
       // Use an absolute path to the processor to ensure it loads properly
-      await this.audioContext.audioWorklet.addModule('/src/audio/pcm-processor.js');
+      const baseUrl = window.location.origin;
+      await this.audioContext.audioWorklet.addModule(`${baseUrl}/src/audio/pcm-processor.js`);
       console.log('AudioWorklet initialized successfully');
     } catch (error) {
       console.error('Failed to initialize AudioWorklet:', error);
@@ -27,6 +31,10 @@ class AudioService {
     try {
       if (!this.audioContext) {
         await this.initAudioContext();
+      }
+      
+      if (this.audioContext?.state === 'suspended') {
+        await this.audioContext.resume();
       }
       
       console.log('Requesting microphone access...');
@@ -49,7 +57,8 @@ class AudioService {
       };
       
       this.sourceNode.connect(this.audioWorkletNode);
-      this.audioWorkletNode.connect(this.audioContext!.destination);
+      // Don't connect to destination to prevent audio feedback
+      // this.audioWorkletNode.connect(this.audioContext!.destination);
       
       console.log('Starting audio processor...');
       this.audioWorkletNode.port.postMessage({
@@ -71,6 +80,8 @@ class AudioService {
       this.audioWorkletNode.port.postMessage({
         command: 'stop'
       });
+      this.audioWorkletNode.disconnect();
+      this.audioWorkletNode = null;
       this.isProcessing = false;
     }
     
@@ -92,54 +103,95 @@ class AudioService {
       try {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.hostname;
-        const port = process.env.NODE_ENV === 'development' ? '3000' : '3000'; // Always use 3000 for the Node.js server
+        const port = window.location.port === '8080' ? '3000' : window.location.port || '3000';
         
         const wsUrl = `${protocol}//${host}:${port}`;
         console.log(`Connecting to WebSocket server at ${wsUrl}`);
+        
+        if (this.webSocket && 
+            (this.webSocket.readyState === WebSocket.OPEN || 
+             this.webSocket.readyState === WebSocket.CONNECTING)) {
+          this.webSocket.close();
+        }
         
         this.webSocket = new WebSocket(wsUrl);
         
         this.webSocket.onopen = () => {
           console.log('WebSocket connected to server');
+          this.reconnectAttempts = 0;
           this.webSocket!.send(JSON.stringify({
-            type: 'connect'
+            type: 'connect',
+            config: {
+              host: 'web3radio.cloud',
+              port: 8000,
+              password: 'web3radio',
+              mountpoint: '/stream'
+            }
           }));
         };
         
         this.webSocket.onmessage = (event) => {
-          const data = JSON.parse(event.data);
-          console.log('WebSocket message received:', data);
-          
-          if (data.type === 'status') {
-            if (data.status === 'connected') {
-              this.isConnected = true;
-              console.log('Successfully connected to broadcast server');
-              resolve(true);
-            } else if (data.status === 'disconnected') {
+          try {
+            const data = JSON.parse(event.data);
+            console.log('WebSocket message received:', data);
+            
+            if (data.type === 'status') {
+              if (data.status === 'connected') {
+                this.isConnected = true;
+                console.log('Successfully connected to broadcast server');
+                resolve(true);
+              } else if (data.status === 'disconnected') {
+                this.isConnected = false;
+                console.log('Disconnected from broadcast server');
+              }
+            } else if (data.type === 'error') {
+              console.error('Server error:', data.message);
               this.isConnected = false;
-              console.log('Disconnected from broadcast server');
+              reject(new Error(data.message));
             }
-          } else if (data.type === 'error') {
-            console.error('Server error:', data.message);
-            reject(new Error(data.message));
+          } catch (error) {
+            console.error('Error parsing WebSocket message:', error);
+            reject(error);
           }
         };
         
         this.webSocket.onerror = (error) => {
           console.error('WebSocket error:', error);
           this.isConnected = false;
+          this.attemptReconnect();
           reject(error);
         };
         
-        this.webSocket.onclose = () => {
-          console.log('WebSocket disconnected from server');
+        this.webSocket.onclose = (event) => {
+          console.log(`WebSocket disconnected from server: ${event.code} - ${event.reason}`);
           this.isConnected = false;
+          
+          if (this.isProcessing) {
+            this.attemptReconnect();
+          }
         };
       } catch (error) {
         console.error('Failed to connect to server:', error);
         reject(error);
       }
     });
+  }
+
+  private attemptReconnect() {
+    if (this.reconnectAttempts < this.maxReconnectAttempts) {
+      this.reconnectAttempts++;
+      console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+      
+      setTimeout(() => {
+        if (this.isProcessing) {
+          this.connectToServer().catch(error => {
+            console.error('Reconnection attempt failed:', error);
+          });
+        }
+      }, this.reconnectTimeout);
+    } else {
+      console.error('Max reconnection attempts reached');
+    }
   }
 
   public disconnectFromServer() {
@@ -161,14 +213,24 @@ class AudioService {
   }
 
   private sendAudioData(audioData: any) {
-    if (this.webSocket && this.isConnected && this.webSocket.readyState === WebSocket.OPEN) {
+    if (!this.webSocket || !this.isConnected || this.webSocket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    
+    try {
       // Convert Float32Array to regular array for JSON serialization
-      const serializedData = {
-        type: 'audio',
-        buffer: Array.from(audioData.channelData[0])
-      };
-      
-      this.webSocket.send(JSON.stringify(serializedData));
+      // Only send the first channel for simplicity
+      if (audioData.channelData && audioData.channelData.length > 0) {
+        const serializedData = {
+          type: 'audio',
+          buffer: Array.from(audioData.channelData[0]),
+          sampleRate: audioData.sampleRate
+        };
+        
+        this.webSocket.send(JSON.stringify(serializedData));
+      }
+    } catch (error) {
+      console.error('Error sending audio data:', error);
     }
   }
 }
