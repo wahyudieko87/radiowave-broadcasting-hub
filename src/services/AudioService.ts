@@ -1,3 +1,4 @@
+
 class AudioService {
   private audioContext: AudioContext | null = null;
   private mediaStream: MediaStream | null = null;
@@ -17,9 +18,10 @@ class AudioService {
   private async initAudioContext() {
     try {
       this.audioContext = new AudioContext();
-      // Use an absolute path to the processor to ensure it loads properly
-      const baseUrl = window.location.origin;
-      await this.audioContext.audioWorklet.addModule(`${baseUrl}/src/audio/pcm-processor.js`);
+      
+      // Use a relative path to the processor with type="module"
+      // This is crucial for the AudioWorklet to load properly
+      await this.audioContext.audioWorklet.addModule('/src/audio/pcm-processor.js');
       console.log('AudioWorklet initialized successfully');
     } catch (error) {
       console.error('Failed to initialize AudioWorklet:', error);

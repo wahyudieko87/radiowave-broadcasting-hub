@@ -1,3 +1,4 @@
+
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
@@ -110,27 +111,25 @@ wss.on('connection', (ws) => {
   function connectToShoutcast(ws, config) {
     try {
       console.log('Connecting to Shoutcast server...');
-      console.log(`Server: ${config.host}:${config.port}${config.mountpoint}`);
+      console.log(`Server: ${config.host}:${config.port}`);
       
       // Disconnect existing connection if any
       disconnectFromShoutcast();
       
-      // Create FFmpeg process
+      // Create FFmpeg process with the correct URL format
+      // Using the format: http://source:password@host:port/mountpoint
+      const streamUrl = `http://source:${config.password}@${config.host}:${config.port}${config.mountpoint || ''}`;
+      console.log(`Using stream URL: ${streamUrl}`);
+      
       ffmpeg = spawn('ffmpeg', [
         '-f', 's16le',            // Input format: signed 16-bit little-endian
         '-ar', '44100',           // Sample rate: 44.1kHz
         '-ac', '2',               // Channels: 2 (stereo)
         '-i', 'pipe:0',           // Input from stdin
         '-acodec', 'libmp3lame',  // MP3 codec
-        '-ab', '128k',            // Bitrate: 128kbps
-        '-content_type', 'audio/mpeg',
+        '-b:a', '128k',           // Bitrate: 128kbps
         '-f', 'mp3',              // Output format: MP3
-        '-ice_name', 'Web3Radio',
-        '-ice_description', 'Web3 Radio Station',
-        '-ice_genre', 'Various',
-        '-ice_public', '1',
-        '-password', config.password,
-        `icecast://${config.host}:${config.port}${config.mountpoint}`
+        streamUrl
       ]);
       
       // Handle FFmpeg output
@@ -145,7 +144,8 @@ wss.on('connection', (ws) => {
         // Check for successful connection
         if (output.includes('Connection established') || 
             output.includes('Server connection established') || 
-            output.includes('Starting streaming')) {
+            output.includes('Starting streaming') ||
+            output.includes('Stream #0:')) {
           isConnected = true;
           ws.send(JSON.stringify({
             type: 'status',
