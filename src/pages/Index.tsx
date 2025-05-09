@@ -9,9 +9,9 @@ import AudioControls from "@/components/AudioControls";
 import audioService from "@/services/AudioService";
 
 const SHOUTCAST_CONFIG = {
-  host: 'http://202.10.40.105/',
+  host: 'web3radio.cloud',
   port: 8000,
-  password: 'passweb3radio',
+  password: 'web3radio',
   mountpoint: '/stream',
   audioConfig: {
     bitrate: 128000,
@@ -27,6 +27,7 @@ const Index = () => {
   const { toast } = useToast();
   const [isConnecting, setIsConnecting] = useState(false);
 
+  // Clean up on unmount
   useEffect(() => {
     return () => {
       if (isStreaming) {
@@ -49,12 +50,19 @@ const Index = () => {
     setIsConnecting(true);
 
     try {
+      toast({
+        title: "Connecting",
+        description: "Attempting to connect to broadcast server...",
+      });
+
       // Start microphone and connect to server
+      console.log("Starting microphone...");
       const micStarted = await audioService.startMicrophone();
       if (!micStarted) {
         throw new Error('Failed to access microphone');
       }
       
+      console.log("Connecting to server...");
       const connected = await audioService.connectToServer();
       if (!connected) {
         throw new Error('Failed to connect to server');
@@ -74,7 +82,7 @@ const Index = () => {
       setIsConnecting(false);
       toast({
         title: "Error",
-        description: "Failed to establish connection. Please check your network connection.",
+        description: `Failed to establish connection: ${error instanceof Error ? error.message : 'Unknown error'}`,
         variant: "destructive",
       });
     }
@@ -108,9 +116,13 @@ const Index = () => {
                 size="lg"
                 className="w-full transition-all duration-300 hover:scale-105"
                 onClick={isStreaming ? handleStopStream : handleStartStream}
-                disabled={!isNFTVerified}
+                disabled={!isNFTVerified || isConnecting}
               >
-                {isStreaming ? (
+                {isConnecting ? (
+                  <>
+                    <Activity className="mr-2 h-5 w-5 animate-pulse" /> Connecting...
+                  </>
+                ) : isStreaming ? (
                   <>
                     <Radio className="mr-2 h-5 w-5" /> Stop Broadcasting
                   </>
@@ -136,15 +148,15 @@ const Index = () => {
           <div className="grid grid-cols-3 gap-4">
             <div className="p-4 rounded-lg bg-secondary">
               <div className="text-sm text-muted-foreground">Bitrate</div>
-              <div className="text-2xl font-semibold">128 kbps</div>
+              <div className="text-2xl font-semibold">{SHOUTCAST_CONFIG.audioConfig.bitrate / 1000} kbps</div>
             </div>
             <div className="p-4 rounded-lg bg-secondary">
               <div className="text-sm text-muted-foreground">Sample Rate</div>
-              <div className="text-2xl font-semibold">44.1 kHz</div>
+              <div className="text-2xl font-semibold">{SHOUTCAST_CONFIG.audioConfig.sampleRate / 1000} kHz</div>
             </div>
             <div className="p-4 rounded-lg bg-secondary">
               <div className="text-sm text-muted-foreground">Format</div>
-              <div className="text-2xl font-semibold">MP3</div>
+              <div className="text-2xl font-semibold">{SHOUTCAST_CONFIG.audioConfig.encoder.toUpperCase()}</div>
             </div>
           </div>
         </Card>

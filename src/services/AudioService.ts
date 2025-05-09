@@ -15,7 +15,9 @@ class AudioService {
   private async initAudioContext() {
     try {
       this.audioContext = new AudioContext();
+      // Use an absolute path to the processor to ensure it loads properly
       await this.audioContext.audioWorklet.addModule('/src/audio/pcm-processor.js');
+      console.log('AudioWorklet initialized successfully');
     } catch (error) {
       console.error('Failed to initialize AudioWorklet:', error);
     }
@@ -27,7 +29,16 @@ class AudioService {
         await this.initAudioContext();
       }
       
-      this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log('Requesting microphone access...');
+      this.mediaStream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        } 
+      });
+      console.log('Microphone access granted');
+      
       this.sourceNode = this.audioContext!.createMediaStreamSource(this.mediaStream);
       this.audioWorkletNode = new AudioWorkletNode(this.audioContext!, 'pcm-processor');
       
@@ -40,6 +51,7 @@ class AudioService {
       this.sourceNode.connect(this.audioWorkletNode);
       this.audioWorkletNode.connect(this.audioContext!.destination);
       
+      console.log('Starting audio processor...');
       this.audioWorkletNode.port.postMessage({
         command: 'start'
       });
@@ -53,6 +65,8 @@ class AudioService {
   }
 
   public stopMicrophone() {
+    console.log('Stopping microphone...');
+    
     if (this.audioWorkletNode) {
       this.audioWorkletNode.port.postMessage({
         command: 'stop'
@@ -69,6 +83,8 @@ class AudioService {
       this.mediaStream.getTracks().forEach(track => track.stop());
       this.mediaStream = null;
     }
+    
+    console.log('Microphone stopped');
   }
 
   public async connectToServer(): Promise<boolean> {
@@ -76,9 +92,12 @@ class AudioService {
       try {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.hostname;
-        const port = process.env.NODE_ENV === 'development' ? '3000' : window.location.port;
+        const port = process.env.NODE_ENV === 'development' ? '3000' : '3000'; // Always use 3000 for the Node.js server
         
-        this.webSocket = new WebSocket(`${protocol}//${host}:${port}`);
+        const wsUrl = `${protocol}//${host}:${port}`;
+        console.log(`Connecting to WebSocket server at ${wsUrl}`);
+        
+        this.webSocket = new WebSocket(wsUrl);
         
         this.webSocket.onopen = () => {
           console.log('WebSocket connected to server');
@@ -89,13 +108,16 @@ class AudioService {
         
         this.webSocket.onmessage = (event) => {
           const data = JSON.parse(event.data);
+          console.log('WebSocket message received:', data);
           
           if (data.type === 'status') {
             if (data.status === 'connected') {
               this.isConnected = true;
+              console.log('Successfully connected to broadcast server');
               resolve(true);
             } else if (data.status === 'disconnected') {
               this.isConnected = false;
+              console.log('Disconnected from broadcast server');
             }
           } else if (data.type === 'error') {
             console.error('Server error:', data.message);
@@ -121,18 +143,25 @@ class AudioService {
   }
 
   public disconnectFromServer() {
-    if (this.webSocket && this.isConnected) {
-      this.webSocket.send(JSON.stringify({
-        type: 'disconnect'
-      }));
+    if (this.webSocket && (this.webSocket.readyState === WebSocket.OPEN || this.webSocket.readyState === WebSocket.CONNECTING)) {
+      console.log('Disconnecting from server...');
+      
+      if (this.webSocket.readyState === WebSocket.OPEN) {
+        this.webSocket.send(JSON.stringify({
+          type: 'disconnect'
+        }));
+      }
+      
       this.webSocket.close();
       this.webSocket = null;
       this.isConnected = false;
+      
+      console.log('Disconnected from server');
     }
   }
 
   private sendAudioData(audioData: any) {
-    if (this.webSocket && this.isConnected) {
+    if (this.webSocket && this.isConnected && this.webSocket.readyState === WebSocket.OPEN) {
       // Convert Float32Array to regular array for JSON serialization
       const serializedData = {
         type: 'audio',

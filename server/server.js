@@ -5,19 +5,23 @@ const WebSocket = require('ws');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const cors = require('cors');
 
 // Server configuration
 const PORT = process.env.PORT || 3000;
 const SHOUTCAST_CONFIG = {
   host: process.env.SHOUTCAST_HOST || 'web3radio.cloud',
   port: process.env.SHOUTCAST_PORT || 8000,
-  password: process.env.SHOUTCAST_PASSWORD || 'passweb3radio',
+  password: process.env.SHOUTCAST_PASSWORD || 'web3radio',
   mountpoint: process.env.SHOUTCAST_MOUNTPOINT || '/stream'
 };
 
 // Create Express app and HTTP server
 const app = express();
 const server = http.createServer(app);
+
+// Enable CORS
+app.use(cors());
 
 // Create WebSocket server
 const wss = new WebSocket.Server({ server });
@@ -34,7 +38,8 @@ app.use('/api', (req, res) => {
     method: req.method,
     headers: {
       ...req.headers,
-      host: `${SHOUTCAST_CONFIG.host}:${SHOUTCAST_CONFIG.port}`
+      host: `${SHOUTCAST_CONFIG.host}:${SHOUTCAST_CONFIG.port}`,
+      'Authorization': `Basic ${Buffer.from(`source:${SHOUTCAST_CONFIG.password}`).toString('base64')}`
     }
   };
 
@@ -60,27 +65,43 @@ wss.on('connection', (ws) => {
   
   // Handle messages from client
   ws.on('message', (message) => {
-    const data = JSON.parse(message);
-    
-    // Handle different message types
-    switch (data.type) {
-      case 'connect':
-        // Connect to Shoutcast server using FFmpeg
-        connectToShoutcast(ws);
-        break;
-        
-      case 'audio':
-        // Process audio data and send to FFmpeg
-        if (ffmpeg && isConnected) {
-          const buffer = Buffer.from(data.buffer);
-          ffmpeg.stdin.write(buffer);
-        }
-        break;
-        
-      case 'disconnect':
-        // Disconnect from Shoutcast server
-        disconnectFromShoutcast();
-        break;
+    try {
+      const data = JSON.parse(message);
+      
+      // Handle different message types
+      switch (data.type) {
+        case 'connect':
+          // Connect to Shoutcast server using FFmpeg
+          connectToShoutcast(ws);
+          break;
+          
+        case 'audio':
+          // Process audio data and send to FFmpeg
+          if (ffmpeg && isConnected && data.buffer) {
+            // Convert array back to Float32Array
+            const floatArray = new Float32Array(data.buffer);
+            
+            // Convert Float32Array to Int16Array for PCM output
+            const int16Array = new Int16Array(floatArray.length);
+            for (let i = 0; i < floatArray.length; i++) {
+              const sample = floatArray[i];
+              // Clamp to -1.0 to 1.0 and scale to Int16 range (-32768 to 32767)
+              int16Array[i] = Math.max(-1, Math.min(1, sample)) * 32767;
+            }
+            
+            // Create buffer from Int16Array
+            const buffer = Buffer.from(int16Array.buffer);
+            ffmpeg.stdin.write(buffer);
+          }
+          break;
+          
+        case 'disconnect':
+          // Disconnect from Shoutcast server
+          disconnectFromShoutcast();
+          break;
+      }
+    } catch (error) {
+      console.error('Error processing message:', error);
     }
   });
   
@@ -94,22 +115,23 @@ wss.on('connection', (ws) => {
   function connectToShoutcast(ws) {
     try {
       console.log('Connecting to Shoutcast server...');
+      console.log(`Server: ${SHOUTCAST_CONFIG.host}:${SHOUTCAST_CONFIG.port}`);
       
       // Create FFmpeg process
       ffmpeg = spawn('ffmpeg', [
-        '-re',                            // Real-time mode
-        '-i', '-',                        // Input from stdin
-        '-acodec', 'libmp3lame',          // MP3 codec
-        '-ab', '128k',                    // Bitrate
-        '-ac', '2',                       // Channels
-        '-ar', '44100',                   // Sample rate
-        '-content_type', 'audio/mpeg',    // Content type
-        '-f', 'mp3',                      // Output format
-        `-ice_name "Web3Radio"`,          // Icecast metadata
-        `-ice_description "Web3 Radio Station"`,
-        `-ice_genre "Various"`,
-        `-ice_public 1`,
-        `-ice_password ${SHOUTCAST_CONFIG.password}`,
+        '-f', 's16le',            // Input format: signed 16-bit little-endian
+        '-ar', '44100',           // Sample rate: 44.1kHz
+        '-ac', '2',               // Channels: 2 (stereo)
+        '-i', 'pipe:0',           // Input from stdin
+        '-acodec', 'libmp3lame',  // MP3 codec
+        '-ab', '128k',            // Bitrate: 128kbps
+        '-content_type', 'audio/mpeg',
+        '-f', 'mp3',              // Output format: MP3
+        '-ice_name', 'Web3Radio',
+        '-ice_description', 'Web3 Radio Station',
+        '-ice_genre', 'Various',
+        '-ice_public', '1',
+        '-password', SHOUTCAST_CONFIG.password, // Use proper password flag
         `icecast://${SHOUTCAST_CONFIG.host}:${SHOUTCAST_CONFIG.port}${SHOUTCAST_CONFIG.mountpoint}`
       ]);
       
@@ -119,10 +141,11 @@ wss.on('connection', (ws) => {
       });
       
       ffmpeg.stderr.on('data', (data) => {
-        console.log(`FFmpeg stderr: ${data}`);
+        const output = data.toString();
+        console.log(`FFmpeg stderr: ${output}`);
         
         // Check for successful connection
-        if (data.toString().includes('Connection established')) {
+        if (output.includes('Connection established') || output.includes('Server connection established')) {
           isConnected = true;
           ws.send(JSON.stringify({
             type: 'status',
@@ -138,6 +161,14 @@ wss.on('connection', (ws) => {
           type: 'status',
           status: 'disconnected',
           code: code
+        }));
+      });
+      
+      ffmpeg.on('error', (error) => {
+        console.error('FFmpeg error:', error);
+        ws.send(JSON.stringify({
+          type: 'error',
+          message: error.message
         }));
       });
       
@@ -160,6 +191,11 @@ wss.on('connection', (ws) => {
       isConnected = false;
     }
   }
+});
+
+// Handle all routes for React Router
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
 // Start server

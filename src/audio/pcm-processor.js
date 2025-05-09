@@ -7,8 +7,10 @@ class PCMProcessor extends AudioWorkletProcessor {
     this.port.onmessage = (event) => {
       if (event.data.command === 'start') {
         this.isRecording = true;
+        console.log('PCM Processor: Started recording');
       } else if (event.data.command === 'stop') {
         this.isRecording = false;
+        console.log('PCM Processor: Stopped recording');
       }
     };
   }
@@ -25,12 +27,12 @@ class PCMProcessor extends AudioWorkletProcessor {
     const audioData = {
       channelData: [],
       numChannels: input.length,
-      sampleRate: sampleRate
+      sampleRate: sampleRate // This is a global variable in AudioWorkletGlobalScope
     };
     
     for (let channel = 0; channel < input.length; channel++) {
-      // Clone the channel data
-      audioData.channelData.push(new Float32Array(input[channel]));
+      // Clone the channel data to avoid sharing the buffer
+      audioData.channelData.push(Array.from(input[channel]));
     }
     
     this.port.postMessage({
