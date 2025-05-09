@@ -1,4 +1,3 @@
-
 class AudioService {
   private audioContext: AudioContext | null = null;
   private mediaStream: MediaStream | null = null;
@@ -124,7 +123,7 @@ class AudioService {
             config: {
               host: 'web3radio.cloud',
               port: 8000,
-              password: 'web3radio',
+              password: 'passweb3radio',
               mountpoint: '/stream'
             }
           }));

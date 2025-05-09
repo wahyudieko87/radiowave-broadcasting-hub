@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,7 @@ import audioService from "@/services/AudioService";
 const SHOUTCAST_CONFIG = {
   host: 'web3radio.cloud',
   port: 8000,
-  password: 'web3radio',
+  password: 'passweb3radio',  // Updated password here
   mountpoint: '/stream',
   audioConfig: {
     bitrate: 128000,

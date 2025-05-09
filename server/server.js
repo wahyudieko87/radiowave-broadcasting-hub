@@ -1,4 +1,3 @@
-
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
@@ -35,7 +34,7 @@ wss.on('connection', (ws) => {
   let shoutcastConfig = {
     host: 'web3radio.cloud',
     port: 8000,
-    password: 'web3radio',
+    password: 'passweb3radio',  // Updated password here
     mountpoint: '/stream'
   };
   
