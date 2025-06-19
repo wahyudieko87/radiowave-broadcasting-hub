@@ -72,7 +72,7 @@ class AudioService {
   public async connectToServer(): Promise<boolean> {
     return new Promise((resolve, reject) => {
       try {
-        const wsUrl = `${protocol}//${host}:${port}/api`; // ini akan diproxy oleh vite
+        const wsUrl = `${import.meta.env.VITE_STREAM_PROXY_WS ?? '/api'}`;
         const config = {
           host: import.meta.env.VITE_SHOUTCAST_HOST,
           port: parseInt(import.meta.env.VITE_SHOUTCAST_PORT || '8000', 10),
